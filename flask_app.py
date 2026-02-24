@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.get("/")
 def hello():
-    return "Hello, World! (Flask on PythonAnywhere)"
+    return "Bonjour tout le monde ! (Flask on PythonAnywhere)"
 
 if __name__ == "__main__":
     # utile en local uniquement
