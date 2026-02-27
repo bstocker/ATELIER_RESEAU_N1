@@ -22,7 +22,7 @@ Objectif : Créer un hébergement sur Pythonanywhere
 Difficulté : Faible (~10 minutes)
 ---------------------------------------------------
 
-Rendez-vous sur **https://www.pythonanywhere.com/**  
+Rendez-vous sur **https://www.pythonanywhere.com/** et créez vous un compte.  
   
 ---------------------------------------------------------------------------------------------
 Séquence 3 : Les Actions GitHUB (Industrialisation Continue)
