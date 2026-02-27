@@ -1,4 +1,4 @@
-name: Deploy to PythonAnywhere (simple)
+name: Deploy to PythonAnywhere (recursive upload)
 
 on:
   push:
@@ -10,36 +10,108 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Upload flask_app.py to PythonAnywhere
+      - name: Validate required secrets
+        shell: bash
         run: |
+          set -euo pipefail
+          : "${{ secrets.PA_USERNAME }}"
+          : "${{ secrets.PA_TOKEN }}"
+          : "${{ secrets.PA_TARGET_DIR }}"
+          : "${{ secrets.PA_WEBAPP_DOMAIN }}"
+
+      - name: Create remote directories (recursive)
+        shell: bash
+        run: |
+          set -euo pipefail
           USER="${{ secrets.PA_USERNAME }}"
           TOKEN="${{ secrets.PA_TOKEN }}"
           TARGET_DIR="${{ secrets.PA_TARGET_DIR }}"
 
-          # 1) Ensure target dir exists
-          curl -sS -X POST \
+          # Collect all directories that contain deployable files, excluding common junk.
+          mapfile -t DIRS < <(
+            find . \
+              -type d \( -name .git -o -name .github -o -name .venv -o -name __pycache__ -o -name node_modules \) -prune -false \
+              -o -type f \
+                ! -name ".DS_Store" \
+                ! -name "*.pyc" \
+                ! -path "./.git/*" \
+                ! -path "./.github/*" \
+                ! -path "./.venv/*" \
+                ! -path "./__pycache__/*" \
+                ! -path "./node_modules/*" \
+                -print \
+            | sed 's|^\./||' \
+            | xargs -r -n1 dirname \
+            | sort -u
+          )
+
+          # Always ensure base dir exists
+          MKDIR_CMD="mkdir -p '${TARGET_DIR}'"
+          for d in "${DIRS[@]}"; do
+            # Skip "." (repo root)
+            if [[ "$d" != "." ]]; then
+              MKDIR_CMD+=" '${TARGET_DIR}/${d}'"
+            fi
+          done
+
+          echo "Creating remote dirs on PythonAnywhere..."
+          curl -sS --fail -X POST \
             -H "Authorization: Token ${TOKEN}" \
             "https://www.pythonanywhere.com/api/v0/user/${USER}/consoles/bash/" \
             -d "executable=/bin/bash" \
             -d "arguments=-lc" \
-            -d "arguments=mkdir -p '${TARGET_DIR}'" \
+            -d "arguments=${MKDIR_CMD}" \
             >/dev/null
 
-          # 2) Upload the single file (no zip)
-          curl -sS -X POST \
-            -H "Authorization: Token ${TOKEN}" \
-            -F "content=@flask_app.py" \
-            "https://www.pythonanywhere.com/api/v0/user/${USER}/files/path${TARGET_DIR}/flask_app.py"
+      - name: Upload all files recursively
+        shell: bash
+        run: |
+          set -euo pipefail
+          USER="${{ secrets.PA_USERNAME }}"
+          TOKEN="${{ secrets.PA_TOKEN }}"
+          TARGET_DIR="${{ secrets.PA_TARGET_DIR }}"
+
+          echo "Uploading files..."
+          # NOTE: Avoid spaces/special chars in paths. If you have them, rename files/folders.
+          while IFS= read -r -d '' file; do
+            rel="${file#./}"
+            # Exclude any leftover undesired paths (defense-in-depth)
+            case "$rel" in
+              .git/*|.github/*|.venv/*|__pycache__/*|node_modules/*) continue ;;
+              *.pyc|.DS_Store) continue ;;
+            esac
+
+            remote_path="${TARGET_DIR}/${rel}"
+            echo " - ${rel} -> ${remote_path}"
+
+            curl -sS --fail -X POST \
+              -H "Authorization: Token ${TOKEN}" \
+              -F "content=@${file}" \
+              "https://www.pythonanywhere.com/api/v0/user/${USER}/files/path${remote_path}" \
+              >/dev/null
+
+          done < <(
+            find . \
+              -type d \( -name .git -o -name .github -o -name .venv -o -name __pycache__ -o -name node_modules \) -prune -false \
+              -o -type f \
+                ! -name ".DS_Store" \
+                ! -name "*.pyc" \
+                -print0
+          )
 
       - name: Reload PythonAnywhere webapp
+        shell: bash
         run: |
+          set -euo pipefail
           USER="${{ secrets.PA_USERNAME }}"
           TOKEN="${{ secrets.PA_TOKEN }}"
           DOMAIN="${{ secrets.PA_WEBAPP_DOMAIN }}"
 
-          curl -sS -X POST \
+          echo "Reloading webapp ${DOMAIN}..."
+          curl -sS --fail -X POST \
             -H "Authorization: Token ${TOKEN}" \
             "https://www.pythonanywhere.com/api/v0/user/${USER}/webapps/${DOMAIN}/reload/" \
             >/dev/null
