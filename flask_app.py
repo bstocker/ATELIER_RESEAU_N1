@@ -99,7 +99,7 @@ def index():
     <h1>Network Lab (Flask)</h1>
     <ul>
       <li><a href="/osi">/osi</a> — OSI mapping</li>
-      <li><a href="/dhcp">/osi</a> — Protocole DHCP</li>
+      <li><a href="/dhcp">/dhcp</a> — Protocole DHCP</li>
       <li><a href="/service">/service</a> — service contract & dependencies</li>
       <li><a href="/slow?ms=300">/slow</a> — simulate latency</li>
       <li><a href="/loss?p=0.2">/loss</a> — simulate errors/loss</li>
